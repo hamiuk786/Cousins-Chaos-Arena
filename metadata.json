@@ -1,0 +1,6 @@
+{
+  "name": "Cousins Chaos Arena",
+  "description": "True shared real-time multiplayer wedding balloon arena with authoritative Matter.js server physics, live WebSockets, and Firebase leaderboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,243 @@
+{
+  "entities": {
+    "Room": {
+      "title": "Wedding Game Room",
+      "description": "Single shared multiplayer arena room settings and lifecycle state.",
+      "type": "object",
+      "properties": {
+        "roomId": {
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 80,
+          "minLength": 1
+        },
+        "hostUid": {
+          "type": "string",
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["WAITING", "READY", "COUNTDOWN", "PLAYING", "FINISHED"]
+        },
+        "roundDurationSeconds": {
+          "type": "number"
+        },
+        "maxParticipants": {
+          "type": "number"
+        },
+        "roundNumber": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "roomId",
+        "title",
+        "hostUid",
+        "status",
+        "roundDurationSeconds",
+        "maxParticipants",
+        "roundNumber",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Cousin": {
+      "title": "Cousin Participant Slot",
+      "description": "A cousin name and balloon assignment in the wedding room.",
+      "type": "object",
+      "properties": {
+        "cousinId": {
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "roomId": {
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 32,
+          "minLength": 1
+        },
+        "color": {
+          "type": "string",
+          "maxLength": 20,
+          "minLength": 4,
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "claimedByUid": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "cousinId",
+        "roomId",
+        "name",
+        "color",
+        "claimedByUid",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "MatchResult": {
+      "title": "Completed Match Result",
+      "description": "Immutable final leaderboard and winner record persisted after a completed round.",
+      "type": "object",
+      "properties": {
+        "matchId": {
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "roomId": {
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "hostUid": {
+          "type": "string",
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "roundNumber": {
+          "type": "number"
+        },
+        "winnerName": {
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1
+        },
+        "winnerScore": {
+          "type": "number"
+        },
+        "participantCount": {
+          "type": "number"
+        },
+        "durationSeconds": {
+          "type": "number"
+        },
+        "leaderboard": {
+          "type": "array",
+          "description": "Top 50 ranked players with authoritative final scores."
+        },
+        "finishedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "matchId",
+        "roomId",
+        "hostUid",
+        "roundNumber",
+        "winnerName",
+        "winnerScore",
+        "participantCount",
+        "durationSeconds",
+        "leaderboard",
+        "finishedAt"
+      ]
+    },
+    "Checkpoint": {
+      "title": "Match Recovery Checkpoint",
+      "description": "Host-only periodic recovery snapshot for server restart resilience.",
+      "type": "object",
+      "properties": {
+        "checkpointId": {
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "roomId": {
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "hostUid": {
+          "type": "string",
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "roundNumber": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["WAITING", "READY", "COUNTDOWN", "PLAYING", "FINISHED"]
+        },
+        "timeRemainingMs": {
+          "type": "number"
+        },
+        "balloonsCount": {
+          "type": "number"
+        },
+        "savedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "checkpointId",
+        "roomId",
+        "hostUid",
+        "roundNumber",
+        "status",
+        "timeRemainingMs",
+        "balloonsCount",
+        "savedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/rooms/{roomId}": {
+      "schema": { "$ref": "#/entities/Room" },
+      "description": "Single wedding arena room configuration and status."
+    },
+    "/rooms/{roomId}/cousins/{cousinId}": {
+      "schema": { "$ref": "#/entities/Cousin" },
+      "description": "Cousin roster entries and authenticated guest claims."
+    },
+    "/rooms/{roomId}/matches/{matchId}": {
+      "schema": { "$ref": "#/entities/MatchResult" },
+      "description": "Persistent authoritative match results and final leaderboards."
+    },
+    "/rooms/{roomId}/checkpoints/{checkpointId}": {
+      "schema": { "$ref": "#/entities/Checkpoint" },
+      "description": "Host-only match checkpoint metadata for server recovery."
+    }
+  }
+}

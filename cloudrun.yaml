@@ -1,0 +1,38 @@
+# Google Cloud Run single-room deployment specification for Cousins Chaos Arena
+# Deploy with:
+#   gcloud run services replace cloudrun.yaml --region=asia-southeast1
+#
+# CRITICAL SINGLE-ROOM INVARIANT:
+#   autoscaling.knative.dev/maxScale: "1" guarantees only ONE authoritative Matter.js
+#   simulation instance runs for the wedding room so two independent rooms can never spawn.
+#
+# BILLING NOTES:
+#   - Setting minScale: "1" during the wedding event keeps the container warm so the room
+#     never cold-starts mid-party (~1 vCPU / 512MiB for a 4-hour event costs only pennies).
+#   - After the wedding, set minScale: "0" to scale to zero and incur $0 idle cost.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: cousins-chaos-arena
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "1"
+        run.googleapis.com/cpu-throttling: "false"
+        run.googleapis.com/sessionAffinity: "true"
+    spec:
+      containerConcurrency: 100
+      timeoutSeconds: 3600
+      containers:
+        - image: gcr.io/PROJECT_ID/cousins-chaos-arena:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NODE_ENV
+              value: "production"
+          resources:
+            limits:
+              cpu: "1"
+              memory: "512Mi"

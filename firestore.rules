@@ -1,0 +1,287 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ---- Hardened Global Primitives ----
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isVerified() && (
+        request.auth.token.email == 'bhoraniyahami@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 64 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidUid(uid) {
+      return uid is string && uid.size() >= 1 && uid.size() <= 128 && uid.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // ---- Validation Blueprints (Anti-Update-Gap) ----
+    function isValidRoom(data, roomId) {
+      return data.keys().hasAll([
+          'roomId', 'title', 'hostUid', 'status',
+          'roundDurationSeconds', 'maxParticipants', 'roundNumber',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'roomId', 'title', 'hostUid', 'status',
+          'roundDurationSeconds', 'maxParticipants', 'roundNumber',
+          'createdAt', 'updatedAt'
+        ])
+        && data.roomId == roomId
+        && isValidId(data.roomId)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 80
+        && isValidUid(data.hostUid)
+        && data.status in ['WAITING', 'READY', 'COUNTDOWN', 'PLAYING', 'FINISHED']
+        && data.roundDurationSeconds is int && data.roundDurationSeconds >= 30 && data.roundDurationSeconds <= 300
+        && data.maxParticipants is int && data.maxParticipants >= 2 && data.maxParticipants <= 50
+        && data.roundNumber is int && data.roundNumber >= 1 && data.roundNumber <= 1000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCousin(data, roomId, cousinId) {
+      return data.keys().hasAll([
+          'cousinId', 'roomId', 'name', 'color', 'claimedByUid', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'cousinId', 'roomId', 'name', 'color', 'claimedByUid', 'createdAt', 'updatedAt'
+        ])
+        && data.cousinId == cousinId
+        && isValidId(data.cousinId)
+        && data.roomId == roomId
+        && isValidId(data.roomId)
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 32
+        && data.color is string && data.color.size() >= 4 && data.color.size() <= 20 && data.color.matches('^#[0-9a-fA-F]{6}$')
+        && data.claimedByUid is string && data.claimedByUid.size() <= 128
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidMatchResult(data, roomId, matchId) {
+      return data.keys().hasAll([
+          'matchId', 'roomId', 'hostUid', 'roundNumber',
+          'winnerName', 'winnerScore', 'participantCount',
+          'durationSeconds', 'leaderboard', 'finishedAt'
+        ])
+        && data.keys().hasOnly([
+          'matchId', 'roomId', 'hostUid', 'roundNumber',
+          'winnerName', 'winnerScore', 'participantCount',
+          'durationSeconds', 'leaderboard', 'finishedAt'
+        ])
+        && data.matchId == matchId
+        && isValidId(data.matchId)
+        && data.roomId == roomId
+        && isValidId(data.roomId)
+        && isValidUid(data.hostUid)
+        && data.roundNumber is int && data.roundNumber >= 1 && data.roundNumber <= 1000
+        && data.winnerName is string && data.winnerName.size() >= 1 && data.winnerName.size() <= 64
+        && data.winnerScore is int && data.winnerScore >= 0 && data.winnerScore <= 100000
+        && data.participantCount is int && data.participantCount >= 0 && data.participantCount <= 50
+        && data.durationSeconds is int && data.durationSeconds >= 0 && data.durationSeconds <= 600
+        && data.leaderboard is list && data.leaderboard.size() <= 50
+        && (data.leaderboard.size() == 0 || data.leaderboard[0] is map)
+        && data.finishedAt is timestamp;
+    }
+
+    function isValidCheckpoint(data, roomId, checkpointId) {
+      return data.keys().hasAll([
+          'checkpointId', 'roomId', 'hostUid', 'roundNumber',
+          'status', 'timeRemainingMs', 'balloonsCount', 'savedAt'
+        ])
+        && data.keys().hasOnly([
+          'checkpointId', 'roomId', 'hostUid', 'roundNumber',
+          'status', 'timeRemainingMs', 'balloonsCount', 'savedAt'
+        ])
+        && data.checkpointId == checkpointId
+        && isValidId(data.checkpointId)
+        && data.roomId == roomId
+        && isValidId(data.roomId)
+        && isValidUid(data.hostUid)
+        && data.roundNumber is int && data.roundNumber >= 1 && data.roundNumber <= 1000
+        && data.status in ['WAITING', 'READY', 'COUNTDOWN', 'PLAYING', 'FINISHED']
+        && data.timeRemainingMs is int && data.timeRemainingMs >= 0 && data.timeRemainingMs <= 300000
+        && data.balloonsCount is int && data.balloonsCount >= 0 && data.balloonsCount <= 50
+        && data.savedAt is timestamp;
+    }
+
+    // ---- Admins collection (read own status only, no client writes) ----
+    match /admins/{adminUid} {
+      allow get: if isSignedIn() && isValidUid(adminUid) && request.auth.uid == adminUid;
+      allow list, create, update, delete: if false;
+    }
+
+    // ---- Connection test doc ----
+    match /test/connection {
+      allow get: if isSignedIn();
+      allow list, write: if false;
+    }
+
+    // ---- Rooms Collection ----
+    match /rooms/{roomId} {
+      allow get: if isSignedIn() && isValidId(roomId);
+      allow list: if isSignedIn() && resource.data.roomId == 'wedding-main';
+
+      allow create: if isVerified()
+        && isValidId(roomId)
+        && isValidRoom(incoming(), roomId)
+        && incoming().hostUid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && isAdmin();
+
+      allow update: if isVerified()
+        && isValidId(roomId)
+        && isValidRoom(incoming(), roomId)
+        && incoming().createdAt == existing().createdAt
+        && incoming().hostUid == existing().hostUid
+        && incoming().roomId == existing().roomId
+        && incoming().updatedAt == request.time
+        && isAdmin()
+        && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'status', 'roundNumber', 'updatedAt']);
+
+      allow delete: if isVerified() && isValidId(roomId) && isAdmin();
+
+      // ---- Cousins Subcollection (Master Gate checks parent room exists) ----
+      match /cousins/{cousinId} {
+        allow get: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(cousinId)
+          && exists(/databases/$(database)/documents/rooms/$(roomId));
+
+        allow list: if isSignedIn()
+          && resource.data.roomId == roomId;
+
+        allow create: if isVerified()
+          && isValidId(roomId)
+          && isValidId(cousinId)
+          && isValidCousin(incoming(), roomId, cousinId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && isAdmin()
+          && exists(/databases/$(database)/documents/rooms/$(roomId));
+
+        allow update: if isVerified()
+          && isValidId(roomId)
+          && isValidId(cousinId)
+          && isValidCousin(incoming(), roomId, cousinId)
+          && incoming().createdAt == existing().createdAt
+          && incoming().roomId == existing().roomId
+          && incoming().cousinId == existing().cousinId
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/rooms/$(roomId))
+          && (
+            // Tier 1: Host/Admin can edit cousin name, color, or clear claim
+            (
+              isAdmin()
+              && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'color', 'claimedByUid', 'updatedAt'])
+            )
+            ||
+            // Tier 2: Authenticated guest can claim an unclaimed cousin or unclaim their own
+            (
+              incoming().diff(existing()).affectedKeys().hasOnly(['claimedByUid', 'updatedAt'])
+              && (
+                (existing().claimedByUid == '' && incoming().claimedByUid == request.auth.uid)
+                ||
+                (existing().claimedByUid == request.auth.uid && incoming().claimedByUid == '')
+              )
+            )
+          );
+
+        allow delete: if isVerified()
+          && isValidId(roomId)
+          && isValidId(cousinId)
+          && isAdmin()
+          && exists(/databases/$(database)/documents/rooms/$(roomId));
+      }
+
+      // ---- Matches Subcollection (Persistent Final Leaderboards) ----
+      match /matches/{matchId} {
+        allow get: if isSignedIn()
+          && isValidId(roomId)
+          && isValidId(matchId)
+          && exists(/databases/$(database)/documents/rooms/$(roomId));
+
+        allow list: if isSignedIn()
+          && resource.data.roomId == roomId;
+
+        allow create: if isVerified()
+          && isValidId(roomId)
+          && isValidId(matchId)
+          && isValidMatchResult(incoming(), roomId, matchId)
+          && incoming().hostUid == request.auth.uid
+          && incoming().finishedAt == request.time
+          && isAdmin()
+          && exists(/databases/$(database)/documents/rooms/$(roomId));
+
+        // Completed match results are immutable for guests; admins may delete only
+        allow update: if false;
+        allow delete: if isVerified()
+          && isValidId(roomId)
+          && isValidId(matchId)
+          && isAdmin();
+      }
+
+      // ---- Checkpoints Subcollection (Host-only Recovery) ----
+      match /checkpoints/{checkpointId} {
+        allow get: if isVerified()
+          && isValidId(roomId)
+          && isValidId(checkpointId)
+          && isAdmin()
+          && exists(/databases/$(database)/documents/rooms/$(roomId));
+
+        allow list: if isVerified()
+          && resource.data.roomId == roomId
+          && resource.data.hostUid == request.auth.uid;
+
+        allow create: if isVerified()
+          && isValidId(roomId)
+          && isValidId(checkpointId)
+          && isValidCheckpoint(incoming(), roomId, checkpointId)
+          && incoming().hostUid == request.auth.uid
+          && incoming().savedAt == request.time
+          && isAdmin()
+          && exists(/databases/$(database)/documents/rooms/$(roomId));
+
+        allow update: if isVerified()
+          && isValidId(roomId)
+          && isValidId(checkpointId)
+          && isValidCheckpoint(incoming(), roomId, checkpointId)
+          && incoming().hostUid == existing().hostUid
+          && incoming().roomId == existing().roomId
+          && incoming().checkpointId == existing().checkpointId
+          && incoming().savedAt == request.time
+          && isAdmin()
+          && incoming().diff(existing()).affectedKeys().hasOnly(['roundNumber', 'status', 'timeRemainingMs', 'balloonsCount', 'savedAt']);
+
+        allow delete: if isVerified()
+          && isValidId(roomId)
+          && isValidId(checkpointId)
+          && isAdmin();
+      }
+    }
+  }
+}
